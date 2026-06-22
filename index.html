@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo do Labirinto com Fantasmas</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        h1 {
+            margin: 5px 0;
+            font-size: 20px;
+        }
+        #score {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        canvas {
+            border: 3px solid #333;
+            background-color: #000;
+            max-width: 95vw;
+            max-height: 50vh;
+        }
+        .msg {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 5px 0;
+            height: 20px;
+        }
+        /* Botão Novo Jogo */
+        .btn-reset {
+            background-color: #ff5555;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .btn-reset:active {
+            background-color: #cc3333;
+        }
+        /* Controles Virtuais */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(2, 60px);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .btn {
+            background-color: #333;
+            color: white;
+            border: 2px solid #555;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .btn:active {
+            background-color: #555;
+        }
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+    </style>
+</head>
+<body>
+
+    <h1>O Labirinto</h1>
+    <div id="score">Pontos: 0 / 102</div>
+    <canvas id="gameCanvas" width="575" height="575"></canvas>
+    <div id="msg" class="msg">Use as setas abaixo ou do teclado!</div>
+    
+    <button class="btn-reset" onclick="resetGame()">Novo Jogo</button>
+
+    <div class="controls">
+        <div class="btn btn-up" onclick="movePlayer(0, -1)">▲</div>
+        <div class="btn btn-left" onclick="movePlayer(-1, 0)">◀</div>
+        <div class="btn btn-down" onclick="movePlayer(0, 1)">▼</div>
+        <div class="btn btn-right" onclick="movePlayer(1, 0)">▶</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+        const msgElement = document.getElementById("msg");
+
+        const TILE_SIZE = 25;
+        const ROWS = 23;
+        const COLS = 23;
+
+        // Mapa original para referência no reset
+        const originalMap = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1,0,1,1,0,1,0,1,1,0,1,0,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1],
+            [1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,1,2,1,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,1,1,0,1,0,1,1,1,2,1,1,1,0,1,0,1,1,1,1,1],
+            [2,2,2,2,1,0,0,0,1,2,2,2,2,2,1,0,0,0,1,2,2,2,2],
+            [1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1],
+            [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1],
+            [2,2,2,2,1,0,0,0,1,2,2,2,2,2,1,0,0,0,1,2,2,2,2],
+            [1,1,1,1,1,0,1,0,1,1,1,2,1,1,1,0,1,0,1,1,1,1,1],
+            [1,0,0,0,0,0,1,0,0,0,1,2,1,0,0,0,1,0,0,0,0,0,1],
+            [1,0,1,0,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
+            [1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,0,1,0,1,1,0,1,0,1,1,0,1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        let map = [];
+        let totalDots = 0;
+        let score = 0;
+        let gameOver = false;
+
+        const player = { x: 11, y: 11, color: "#FFFF00" };
+
+        const ghosts = [
+            { x: 1, y: 1, color: "#FF0000", dx: 0, dy: 0 },
+            { x: 21, y: 1, color: "#FFB8FF", dx: 0, dy: 0 },
+            { x: 1, y: 21, color: "#00FFFF", dx: 0, dy: 0 },
+            { x: 21, y: 21, color: "#FFB852", dx: 0, dy: 0 }
+        ];
+
+        const directions = [
+            {x: 0, y: -1}, {x: 0, y: 1}, {x: -1, y: 0}, {x: 1, y: 0}
+        ];
+
+        // Função para iniciar ou reiniciar o estado do jogo
+        function resetGame() {
+            // Copiar o mapa original
+            map = originalMap.map(row => [...row]);
+            
+            // Recomeçar variáveis
+            score = 0;
+            gameOver = false;
+            
+            // Resetar jogador
+            player.x = 11;
+            player.y = 11;
+
+            // Resetar fantasmas
+            ghosts[0].x = 1;  ghosts[0].y = 1;  ghosts[0].dx = 0; ghosts[0].dy = 0;
+            ghosts[1].x = 21; ghosts[1].y = 1;  ghosts[1].dx = 0; ghosts[1].dy = 0;
+            ghosts[2].x = 1;  ghosts[2].y = 21; ghosts[2].dx = 0; ghosts[2].dy = 0;
+            ghosts[3].x = 21; ghosts[3].y = 21; ghosts[3].dx = 0; ghosts[3].dy = 0;
+
+            // Contar pontos
+            totalDots = 0;
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    if(map[r][c] === 0) totalDots++;
+                }
+            }
+
+            // Atualizar textos da tela
+            scoreElement.innerText = `Pontos: ${score} / ${totalDots}`;
+            msgElement.innerText = "Use as setas abaixo ou do teclado!";
+            msgElement.style.color = "#fff";
+
+            draw();
+        }
+
+        function moveGhosts() {
+            if (gameOver) return;
+            ghosts.forEach(ghost => {
+                let validMoves = [];
+                directions.forEach(dir => {
+                    let nextX = ghost.x + dir.x;
+                    let nextY = ghost.y + dir.y;
+                    if (nextX < 0) nextX = COLS - 1;
+                    if (nextX >= COLS) nextX = 0;
+                    if (map[nextY] && map[nextY][nextX] !== 1) {
+                        if (!(dir.x === -ghost.dx && dir.y === -ghost.dy) || validMoves.length === 0) {
+                            validMoves.push(dir);
+                        }
+                    }
+                });
+                if (validMoves.length > 0) {
+                    let move = validMoves[Math.floor(Math.random() * validMoves.length)];
+                    ghost.dx = move.x;
+                    ghost.dy = move.y;
+                }
+                ghost.x += ghost.dx;
+                ghost.y += ghost.dy;
+                if (ghost.x < 0) ghost.x = COLS - 1;
+                if (ghost.x >= COLS) ghost.x = 0;
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (map[r][c] === 1) {
+                        ctx.fillStyle = "#0000FF";
+                        ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    } else if (map[r][c] === 0) {
+                        ctx.fillStyle = "#FFFFFF";
+                        ctx.beginPath();
+                        ctx.arc(c * TILE_SIZE + TILE_SIZE/2, r * TILE_SIZE + TILE_SIZE/2, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            ctx.fillStyle = player.color;
+            ctx.beginPath();
+            ctx.arc(player.x * TILE_SIZE + TILE_SIZE/2, player.y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ghosts.forEach(ghost => {
+                ctx.fillStyle = ghost.color;
+                ctx.beginPath();
+                ctx.arc(ghost.x * TILE_SIZE + TILE_SIZE/2, ghost.y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2 - 2, Math.PI, 0, false);
+                ctx.rect(ghost.x * TILE_SIZE + 2, ghost.y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE - 4, TILE_SIZE/2 - 2);
+                ctx.fill();
+            });
+        }
+
+        function checkCollisions() {
+            if (map[player.y][player.x] === 0) {
+                map[player.y][player.x] = 2;
+                score++;
+                scoreElement.innerText = `Pontos: ${score} / ${totalDots}`;
+                if (score === totalDots) {
+                    gameOver = true;
+                    msgElement.innerText = "Parabéns! Você Venceu! 🎉";
+                    msgElement.style.color = "#00FF00";
+                }
+            }
+            ghosts.forEach(ghost => {
+                if (ghost.x === player.x && ghost.y === player.y) {
+                    gameOver = true;
+                    msgElement.innerText = "Fim de Jogo! O fantasma te pegou. 👻";
+                    msgElement.style.color = "#FF0000";
+                }
+            });
+        }
+
+        function movePlayer(dx, dy) {
+            if (gameOver) return;
+            let nextX = player.x + dx;
+            let nextY = player.y + dy;
+
+            if (nextX < 0) nextX = COLS - 1;
+            if (nextX >= COLS) nextX = 0;
+
+            if (map[nextY] && map[nextY][nextX] !== 1) {
+                player.x = nextX;
+                player.y = nextY;
+                checkCollisions();
+                draw();
+            }
+        }
+
+        window.addEventListener("keydown", e => {
+            if (e.key === "ArrowUp") movePlayer(0, -1);
+            else if (e.key === "ArrowDown") movePlayer(0, 1);
+            else if (e.key === "ArrowLeft") movePlayer(-1, 0);
+            else if (e.key === "ArrowRight") movePlayer(1, 0);
+        });
+
+        function gameLoop() {
+            if (!gameOver) {
+                moveGhosts();
+                checkCollisions();
+                draw();
+            }
+        }
+
+        // Inicializa o jogo pela primeira vez
+        resetGame();
+        setInterval(gameLoop, 250);
+    </script>
+</body>
+</html>
